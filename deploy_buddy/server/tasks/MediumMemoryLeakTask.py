@@ -9,9 +9,9 @@ class MediumMemoryLeakTask:
     def get_initial_state(self):
         return {
             "services": {
-                "api": {"latency": 300, "error": 0.4, "replicas": 2, "cpu": 65, "connections": 50, "free_memory": 5},
+                "api": {"latency": 300, "error": 0.4, "replicas": 2, "cpu": 65, "connections": 50, "free_memory": 12, "disk_available": 50},
                 "task_runner": {"latency": 200, "error": 1, "free_memory": 0.5, "replicas": 1, "cpu": 85, "connections": 90, "disk_available": 12},
-                "db": {"cpu": 60, "connections": 70, "replicas": 1, "latency": 50},
+                "db": {"cpu": 60, "connections": 70, "replicas": 1, "latency": 50, "disk_available": 70, "free_memory": 12},
             },
             "incident": "memory_leak",
             "time": 0,
@@ -112,6 +112,10 @@ class MediumMemoryLeakTask:
     def compute_reward(self, prev_state, curr_state, action: DeployBuddyAction):
         reward = 0.0
 
+        curr_api = curr_state["services"]["api"]
+
+        curr_db = curr_state["services"]["db"]
+
         prev_task_runner = prev_state["services"]["task_runner"]
         curr_task_runner = curr_state["services"]["task_runner"]
 
@@ -119,6 +123,23 @@ class MediumMemoryLeakTask:
         reward += (prev_task_runner["cpu"] - curr_task_runner["cpu"]) * 0.01
         reward += (curr_task_runner["free_memory"] - prev_task_runner["free_memory"]) * 0.01
 
+        # penalty for underutilized resources we want to be cost efficient
+        def under_util_penalty(cpu, free_mem):
+            penalty = 0.0
+            if free_mem < 16 or cpu > 30:
+                return penalty # only penalize if everything is underutilized
+            if free_mem >= 16:
+                penalty += (free_mem - 16) * 0.03 
+            if cpu <= 30:
+                penalty += (30 - cpu) * 0.03
+            return penalty
+
+        penalty = 0.0
+        penalty += under_util_penalty(curr_api["cpu"], curr_api["free_memory"])
+        penalty += under_util_penalty(curr_db["cpu"], curr_db["free_memory"])
+        penalty += under_util_penalty(curr_task_runner["cpu"], curr_task_runner["free_memory"])
+
+        reward -= penalty
 
         # penalize for each node increase to maintain cost
         if action.action_type == "revert_version" and action.target == "task_runner":
@@ -129,7 +150,7 @@ class MediumMemoryLeakTask:
             # penalizing for each incorrect action
             reward -= 0.1
         
-        return min(max(reward, -1.0), 1.0)
+        return reward
     
     def grade(self, final_state, actions):
         tr = final_state["services"]["task_runner"]
@@ -142,10 +163,15 @@ class MediumMemoryLeakTask:
         memory_ok = tr["free_memory"] > 2
 
         success = reverted and memory_ok
+        score = 0.0
+        if reverted and not memory_ok:
+            score = 0.4
+        if success:
+            score = 1.0
 
         return {
             "success": success,
-            "score": 1.0 if success else 0.0,
+            "score": score,
             "reason": (
                 "Memory leak fixed via revert"
                 if success else

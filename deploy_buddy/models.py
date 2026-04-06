@@ -24,7 +24,8 @@ class DeployBuddyAction(Action):
         "scale_service",
         "restart_service",
         "revert_version",
-        "wait"
+        "wait",
+        "scale_down_service"
     ] = Field(..., description="Type of action")
 
     target: Optional[str] = Field(

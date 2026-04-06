@@ -20,80 +20,58 @@ class DeployBuddyEnv(
 ):
     """
     Client for the Deploy Buddy Environment.
-
-    This client maintains a persistent WebSocket connection to the environment server,
-    enabling efficient multi-step interactions with lower latency.
-    Each client instance has its own dedicated environment session on the server.
-
-    Example:
-        >>> # Connect to a running server
-        >>> with DeployBuddyEnv(base_url="http://localhost:8000") as client:
-        ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
-        ...
-        ...     result = client.step(DeployBuddyAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
-
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = DeployBuddyEnv.from_docker_image("deploy_buddy-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(DeployBuddyAction(message="Test"))
-        ... finally:
-        ...     client.close()
     """
 
     def _step_payload(self, action: DeployBuddyAction) -> Dict:
         """
         Convert DeployBuddyAction to JSON payload for step message.
-
-        Args:
-            action: DeployBuddyAction instance
-
-        Returns:
-            Dictionary representation suitable for JSON encoding
         """
-        return {
-            "message": action.message,
-        }
+        # FIX: send full action, not "message"
+        return action.model_dump()
 
     def _parse_result(self, payload: Dict) -> StepResult[DeployBuddyObservation]:
         """
-        Parse server response into StepResult[DeployBuddyObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with DeployBuddyObservation
+        Parse server response into StepResult.
         """
         obs_data = payload.get("observation", {})
+
         observation = DeployBuddyObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
-            done=payload.get("done", False),
-            reward=payload.get("reward"),
+            metrics=obs_data.get("metrics", {}),
+            logs=obs_data.get("logs", []),
+            alerts=obs_data.get("alerts", []),
+            step=obs_data.get("step", 0),
+            done=obs_data.get("done", False),
+            reward=obs_data.get("reward", 0.0),
             metadata=obs_data.get("metadata", {}),
         )
 
         return StepResult(
             observation=observation,
-            reward=payload.get("reward"),
+            reward=payload.get("reward", 0.0),
             done=payload.get("done", False),
         )
 
     def _parse_state(self, payload: Dict) -> State:
         """
         Parse server response into State object.
-
-        Args:
-            payload: JSON response from state request
-
-        Returns:
-            State object with episode_id and step_count
         """
         return State(
             episode_id=payload.get("episode_id"),
             step_count=payload.get("step_count", 0),
         )
+
+    async def evaluate(self) -> Dict:
+        """
+        Call evaluate endpoint on server.
+        """
+        response = await self._request("POST", "/evaluate", {})
+        return response.get("data", {})
+    
+    async def grade(self) -> Dict:
+        """
+        Call the /grade endpoint on the server.
+        """
+        response = await self._send_and_receive({
+            "type": "grade"
+        })
+        return response.get("data", {})

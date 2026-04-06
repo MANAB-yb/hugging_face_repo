@@ -17,7 +17,7 @@ from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
 from models import DeployBuddyAction, DeployBuddyObservation
-from tasks import EasyDBOverloadTask, MediumMemoryLeakTask, HardFeedbackLoopTask
+from .tasks import EasyDBOverloadTask, MediumMemoryLeakTask, HardFeedbackLoopTask
 
 
 class DeployBuddyEnvironment(Environment):
@@ -127,12 +127,12 @@ class DeployBuddyEnvironment(Environment):
     def _compute_reward(self, prev_state, curr_state, action):
         return self.task.compute_reward(prev_state, curr_state, action)
 
-    def _is_resolved(self, observations: DeployBuddyObservation):
-        alerts = len(observations.alerts)
-        # resolved if there are no alerts left
-        if alerts == 0:
-            return True
-        return False
+    # def _is_resolved(self, observations: DeployBuddyObservation):
+    #     alerts = len(observations.alerts)
+    #     # resolved if there are no alerts left
+    #     if alerts == 0:
+    #         return True
+    #     return False
     
     def grade(self):
         return self.task.grade(
@@ -170,9 +170,13 @@ class DeployBuddyEnvironment(Environment):
         obs.done = done
 
         if done:
-            obs.reward += 5.0
+            obs.reward = 1
 
         return obs
+    
+    def _is_resolved(self, observations):
+        success = self.task.grade(self._internal_state, self.actions)["success"]
+        return success
 
     @property
     def state(self) -> State:

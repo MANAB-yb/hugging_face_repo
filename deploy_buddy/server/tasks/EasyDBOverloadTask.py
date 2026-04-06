@@ -10,7 +10,7 @@ class EasyDBOverloadTask:
         return {
             "services": {
                 "api": {"latency": 200, "cpu": 45, "error": 0.02, "replicas": 2, "free_memory": 4, "connections": 50},
-                "db": {"cpu": 90, "connections": 95, "replicas": 1, "latency": 600, "disk_available": 950},
+                "db": {"cpu": 90, "connections": 95, "replicas": 1, "latency": 600, "disk_available": 950, "free_memory": 8},
                 "task_runner": {"latency": 200, "cpu": 45, "error": 0.02, "replicas": 2, "free_memory": 4, "disk_available": 14}
             },
             "incident": "db_overload",
@@ -28,15 +28,15 @@ class EasyDBOverloadTask:
                 return internal_state # nothing to increase if 0
             if svc == "db":
                 curr_replicas = internal_state["db"]["replicas"]
-                final_count += min(curr_replicas, self.MAX_REPLICAS)
+                final_count = min(final_count + curr_replicas, self.MAX_REPLICAS)
                 # as of now evenly distributing the total load accross the instances
-                internal_state["db"]["cpu"] = max(((internal_state["db"]["cpu"] * curr_replicas) / final_count), 20)
+                internal_state["db"]["cpu"] = max(((internal_state["db"]["cpu"] * curr_replicas) / final_count), 10)
                 internal_state["db"]["connections"] = max(((internal_state["db"]["connections"] * curr_replicas) / final_count), 2)
                 internal_state["db"]["latency"] = max(((internal_state["db"]["latency"] * curr_replicas) / final_count), 2)
                 internal_state["db"]["replicas"] = final_count
             elif svc == "api":
                 curr_replicas = internal_state["api"]["replicas"]
-                final_count += min(curr_replicas, self.MAX_REPLICAS)
+                final_count = min(final_count + curr_replicas, self.MAX_REPLICAS)
                 # as of now evenly distributing the total load accross the instances
                 internal_state["api"]["cpu"] = max(((internal_state["api"]["cpu"] * curr_replicas) / final_count), 20)
                 internal_state["api"]["connections"] = max(((internal_state["api"]["connections"] * curr_replicas) / final_count), 2)
@@ -48,7 +48,7 @@ class EasyDBOverloadTask:
             else:
                 # Task Runner
                 curr_replicas = internal_state["task_runner"]["replicas"]
-                final_count += min(curr_replicas, self.MAX_REPLICAS)
+                final_count = min(final_count + curr_replicas, self.MAX_REPLICAS)
                 # as of now evenly distributing the total load accross the instances
                 internal_state["task_runner"]["cpu"] = max(((internal_state["task_runner"]["cpu"] * curr_replicas) / final_count), 20)
                 internal_state["task_runner"]["connections"] = max(((internal_state["task_runner"]["connections"] * curr_replicas) / final_count), 2)
@@ -67,29 +67,46 @@ class EasyDBOverloadTask:
         prev_db = prev_state["services"]["db"]
         curr_db = curr_state["services"]["db"]
 
+        curr_api = curr_state["services"]["api"]
+        curr_task_runner = curr_state["services"]["task_runner"]
+
         reward += (prev_db["latency"] - curr_db["latency"]) * 0.01
         reward += (prev_db["cpu"] - curr_db["cpu"]) * 0.01
         reward += (prev_db["connections"] - curr_db["connections"]) * 0.01
 
 
-        # penalize for each node increase to maintain cost
-        if action.action_type == "scale_service":
-            reward -= 0.01 * action.value
-        else:
-            reward -= 0.1
-        
-        reward = min(max(reward, -1.0), 1.0)
+        # penalize for each under utilized components
+        def under_util_penalty(cpu, free_mem):
+            penalty = 0.0
+            if free_mem < 16 or cpu > 30:
+                return penalty # only penalize if everything is underutilized
+            if free_mem >= 16:
+                penalty += (free_mem - 16) * 0.03 
+            if cpu <= 30:
+                penalty += (30 - cpu) * 0.03
+            return penalty
 
+        penalty = 0.0
+        penalty += under_util_penalty(curr_api["cpu"], curr_api["free_memory"])
+        penalty += under_util_penalty(curr_db["cpu"], curr_db["free_memory"])
+        penalty += under_util_penalty(curr_task_runner["cpu"], curr_task_runner["free_memory"])
+        # small penalty for incorret action
+        if action.action_type != "scale_service":
+            penalty += 0.05
+ 
         return reward
     
     def grade(self, final_state, actions):
         db = final_state["services"]["db"]
 
-        success = (
-            db["cpu"] < 60 and
-            db["latency"] < 200 and
-            db["connections"] < 70
-        )
+        success = db["cpu"] < 60 and db["latency"] < 300 and db["connections"] < 70
+        score = 0.0
+        if db["cpu"] < 60:
+            score += 0.4
+        if db["latency"] < 300:
+            score += 0.4
+        if db["connections"] < 70:
+            score += 0.2
 
         return {
             "success": success,

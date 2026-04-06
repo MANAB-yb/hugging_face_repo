@@ -1,0 +1,2 @@
+[console_scripts]
+server = deploy_buddy.server.app:main

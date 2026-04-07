@@ -13,7 +13,26 @@ tags:
 
 # Deploy Buddy Environment
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+*Deploy Buddy* is an SRE (Site Reliability Engineer) simulation environment built on OpenEnv.
+It trains AI agents to diagnose and resolve real-world production incidents intelligently.
+
+👉 Core idea:
+*Observe system → Identify root cause → Take correct action*
+
+---
+
+## 🏗️ Architecture
+
+
+Client → Action → Server → Simulation → Observation → Client
+
+
+* *Client* → Sends actions
+* *Server (FastAPI)* → Simulates system
+* *Models* → Define actions & observations
+* *Docker* → Runs environment
+
+---
 
 ## Quick Start
 
@@ -131,29 +150,23 @@ The deployed space includes:
 - `metadata` (dict) - Additional info like step count
 
 ### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
+
+The reward is based on how effectively the agent resolves the underlying issue.
+
+- The environment evaluates the **final system state** and **actions taken**
+- Correct root-cause fixes receive higher scores
+- Partial fixes may receive intermediate rewards
+- Incorrect or unnecessary actions receive low or zero reward
+
+#### Example:
+
+- Correctly fixing a memory leak via version revert → reward: **1.0**
+- Partially addressing the issue (e.g., revert but memory still low) → reward: **0.4**
+- Incorrect action (e.g., scaling when not needed) → reward: **0.0**
 
 ## Advanced Usage
 
-### Connecting to an Existing Server
-
-If you already have a Deploy Buddy environment server running, you can connect directly:
-
-```python
-from deploy_buddy import DeployBuddyEnv
-
-# Connect to existing server
-deploy_buddyenv = DeployBuddyEnv(base_url="<ENV_HTTP_URL_HERE>")
-
-# Use as normal
-result = deploy_buddyenv.reset()
-result = deploy_buddyenv.step(DeployBuddyAction(message="Hello!"))
-```
-
-Note: When connecting to an existing server, `deploy_buddyenv.close()` will NOT stop the server.
+TODO: Fill out this
 
 ### Using the Context Manager
 
@@ -210,7 +223,6 @@ with ThreadPoolExecutor(max_workers=4) as executor:
     results = list(executor.map(run_episode, range(4)))
 ```
 
-## Development & Testing
 
 ### Direct Environment Testing
 
@@ -252,4 +264,8 @@ deploy_buddy/
     ├── deploy_buddy_environment.py  # Core environment logic
     ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
     └── Dockerfile         # Container image definition
+    |___tasks
+        ├── EasyDBOverloadTask.py
+        ├── MediumMemoryLeakTask.py
+        └── HardFeedbackLoopTask.py
 ```

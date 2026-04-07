@@ -35,7 +35,6 @@ except Exception as e:  # pragma: no cover
         "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
     ) from e
 
-
 from models import DeployBuddyAction, DeployBuddyObservation
 from server.deploy_buddy_environment import DeployBuddyEnvironment
 

@@ -13,15 +13,16 @@ API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 
 API_BASE_URL = "https://router.huggingface.co/v1"
 # MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-MODEL_NAME = "deepseek-ai/DeepSeek-R1"
+MODEL_NAME = "Qwen/Qwen2.5-72B-Instruct"
 
-# TASKS = ["task1", "task2", "task3"]
-TASKS = ["task3"]
+TASKS = ["task1", "task2", "task3"]
+
 BENCHMARK = "deploy_buddy"
 
 MAX_STEPS = 10
 TEMPERATURE = 0.3
 MAX_TOKENS = 200
+MAX_LESSONS_CHARS = 1000
 
 
 # ---------- SYSTEM PROMPT ----------
@@ -93,14 +94,13 @@ If there is NO indication of a recent change, avoid reverting.
 
 Unnecessary reverts can disrupt a stable system and should be avoided.
 
-Output STRICTLY JSON:
+Output STRICTLY JSON: If your output is not valid JSON, your answer is considered WRONG.
 {
   "action_type": "...",
   "target": "...",
   "value": <int or null>
 }
 DO NOT include any explanation. ONLY output valid JSON.
-If your output is not valid JSON, your answer is considered WRONG.
 """
 
 
@@ -170,20 +170,24 @@ Remember:
 
 
 # ---------- MODEL ----------
-def get_action(client: OpenAI, obs, history):
+def get_action(client: OpenAI, obs, history, lessons=None):
     try:
+        system_prompt = SYSTEM_PROMPT
+        if lessons:
+            system_prompt += f"\n\nLessons from previous tasks:\n{lessons}"
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": build_prompt(obs, history)},
             ],
+            
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
         )
 
         text = completion.choices[0].message.content.strip()
-
+        print(text)
         action_dict = extract_json(text)
 
         if action_dict is None:
@@ -209,6 +213,7 @@ async def main():
     env = await DeployBuddyEnv.from_docker_image(IMAGE_NAME)
 
     try:
+        global_lessons = None
         for task in TASKS:
             rewards: List[float] = []
             history: List[str] = []
@@ -223,9 +228,9 @@ async def main():
                 for step in range(1, MAX_STEPS + 1):
                     obs = result.observation
 
-                    action, action_str = get_action(client, obs, history)
+                    action, action_str = get_action(client, obs, history, global_lessons)
 
-                    result = await env.step(action)
+                    result = await env.step(action=action)
 
                     reward = result.reward or 0.0
                     done = result.done
@@ -246,6 +251,46 @@ async def main():
                     success = result.done
 
             finally:
+                # Finally grade it
+                # dummy_action = DeployBuddyAction(
+                #                 action_type="wait",
+                #                 target=None,
+                #                 value=None,
+                #                 grade=True
+                #             )
+                # grade_data = await env.step(action=dummy_action)
+                # print(f"grade is {grade_data}")
+                # grade = grade_data.metadata
+                # print(f"grade is {grade}")
+                # print(f"type of grade is {type(grade)}")
+                
+                # reflection_prompt = f"""
+                #     TASK FINISHED.
+                #     Score: {grade['score']}/1.0
+                #     Reason: {grade['reason']}
+
+                #     Extract 3 concise operational lessons.
+
+                #     Rules:
+                #     - Each lesson must be specific and actionable
+                #     - No generic advice
+                #     - Focus on root-cause identification and correct actions
+                #     - Keep each lesson under 15 words
+
+                #     Output as bullet points.
+                #     """
+                
+                # # Add the prompt to the existing conversation
+                # messages = [{"role": "user", "content": reflection_prompt}]
+                
+                # reflection_result = client.chat.completions.create(
+                #     model=MODEL_NAME,
+                #     messages=messages
+                # )
+                # global_lessons += reflection_result.choices[0].message.content + "\n"
+
+                # global_lessons = global_lessons[-MAX_LESSONS_CHARS:]
+                
                 log_end(success=success, steps=steps_taken, rewards=rewards)
 
     finally:

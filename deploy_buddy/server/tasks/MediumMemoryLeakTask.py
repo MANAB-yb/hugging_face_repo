@@ -1,5 +1,5 @@
 from deploy_buddy.models import DeployBuddyAction
-
+import numpy as np
 
 class MediumMemoryLeakTask:
     def __init__(self):
@@ -141,16 +141,14 @@ class MediumMemoryLeakTask:
 
         reward -= penalty
 
-        # penalize for each node increase to maintain cost
+        # penalize for incorrect action
         if action.action_type == "revert_version" and action.target == "task_runner":
             reward += 2.0
-        elif action.action_type == "scale_service":
-            reward -= 0.1 * action.value
         else:
             # penalizing for each incorrect action
             reward -= 0.1
         
-        return reward
+        return np.clip(reward, 0.0, 1.0)
     
     def grade(self, final_state, actions):
         tr = final_state["services"]["task_runner"]
@@ -164,17 +162,19 @@ class MediumMemoryLeakTask:
 
         success = reverted and memory_ok
         score = 0.0
+        reason = ""
         if reverted and not memory_ok:
             score = 0.4
+            reason += "reverting versions worked, but still we need to look "
         if success:
             score = 1.0
+            reason = "Memory leak totally fixed"
+        
+        if reason == "":
+            reason = "Memory leak not properly resolved"
 
         return {
             "success": success,
             "score": score,
-            "reason": (
-                "Memory leak fixed via revert"
-                if success else
-                "Memory leak not properly resolved"
-            )
+            "reason": reason
         }

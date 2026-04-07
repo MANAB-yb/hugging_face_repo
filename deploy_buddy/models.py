@@ -10,7 +10,7 @@ Data models for the Deploy Buddy Environment.
 The deploy_buddy environment is a simple test environment that echoes back messages.
 """
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from openenv.core.env_server.types import Action, Observation
 from pydantic import Field
 
@@ -38,6 +38,11 @@ class DeployBuddyAction(Action):
         description="Used for scaling (number of replicas)"
     )
 
+    grade: bool = Field(
+        default=False,
+        description="enable grading/ evaluation"
+    )
+
 
 class DeployBuddyObservation(Observation):
     """Observation for SRE environment"""
@@ -63,3 +68,8 @@ class DeployBuddyObservation(Observation):
     )
 
     task_id: int = Field(default=0)
+
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional data like grading results"
+    )

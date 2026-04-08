@@ -9,13 +9,13 @@ from deploy_buddy import DeployBuddyAction, DeployBuddyEnv
 
 # ---------- ENV CONFIG ----------
 IMAGE_NAME = os.getenv("IMAGE_NAME")
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+API_KEY = os.getenv("API_KEY")
 
-API_BASE_URL = "https://router.huggingface.co/v1"
+API_BASE_URL = os.getenv("API_BASE_URL")
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 
-TASKS = ["task1", "task2", "task3"]
-# TASKS = ["task2"]
+TASK_NAME = ["task1", "task2", "task3"]
+# TASK_NAME = ["task2"]
 
 BENCHMARK = "deploy_buddy"
 
@@ -134,9 +134,9 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: int, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score} rewards={rewards_str}", flush=True)
 
 
 # ---------- PROMPT ----------
@@ -185,7 +185,6 @@ def get_action(client: OpenAI, obs, history):
         )
 
         text = completion.choices[0].message.content.strip()
-        print(text)
         action_dict = extract_json(text)
 
         if action_dict is None:
@@ -212,7 +211,7 @@ async def main():
 
     try:
         global_lessons = ""
-        for task in TASKS:
+        for task in TASK_NAME:
             rewards: List[float] = []
             history: List[str] = []
             steps_taken = 0
@@ -258,7 +257,8 @@ async def main():
                             )
                 grade_data = await env.step(action=dummy_action)
                 grade = grade_data.observation.grades_data
-                print(f"grade is {grade}")
+
+                score = grade['score']
                 
                 reflection_prompt = f"""
                     TASK FINISHED.
@@ -286,10 +286,11 @@ async def main():
                     global_lessons += reflection_result.choices[0].message.content + "\n"
                     global_lessons = global_lessons[-MAX_LESSONS_CHARS:]
                 except Exception as ex:
-                    print("failed to extract lessons from prev test due to ")
-                    print(ex)
+                    pass
+                    # print("failed to extract lessons from prev test due to ")
+                    # print(ex)
                 
-                log_end(success=success, steps=steps_taken, rewards=rewards)
+                log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
     finally:
         try:

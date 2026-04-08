@@ -1,5 +1,5 @@
 from deploy_buddy.models import DeployBuddyAction
-
+import numpy as np
 
 class EasyDBOverloadTask:
     def __init__(self):
@@ -93,23 +93,34 @@ class EasyDBOverloadTask:
         # small penalty for incorret action
         if action.action_type != "scale_service":
             penalty += 0.05
+
+        reward -= penalty
  
-        return reward
+        return np.clip(reward, 0.0, 1.0)
     
     def grade(self, final_state, actions):
         db = final_state["services"]["db"]
 
         success = db["cpu"] < 60 and db["latency"] < 300 and db["connections"] < 70
         score = 0.0
+        reason = ""
         if db["cpu"] < 60:
             score += 0.4
+            reason += "DB CPU Load reduced, "
         if db["latency"] < 300:
             score += 0.4
+            reason += "DB Latency reduced, "
         if db["connections"] < 70:
             score += 0.2
+            reason += "DB connections reduced, "
+
+        if reason == "":
+            reason = "DB is still overloaded heavily"
+        if score == 1:
+            reason = "Congratts the DB is completely stable, " + reason
 
         return {
             "success": success,
-            "score": 1.0 if success else 0.0,
-            "reason": "DB stabilized" if success else "DB still overloaded"
+            "score": score,
+            "reason": reason
         }

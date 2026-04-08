@@ -1,5 +1,5 @@
 from deploy_buddy.models import DeployBuddyAction
-
+import numpy as np
 
 class HardFeedbackLoopTask:
     def __init__(self):
@@ -116,6 +116,9 @@ class HardFeedbackLoopTask:
                 internal_state["task_runner"]["cpu"] = min(
                     internal_state["task_runner"]["cpu"] - 3 * delta, 100
                 )
+                internal_state["task_runner"]["free_memory"] = min(
+                    internal_state["task_runner"]["free_memory"] + 1.5 * delta, 16
+                )
                 internal_state["task_runner"]["connections"] = (internal_state["db"]["connections"] * curr) / new
                 internal_state["task_runner"]["latency"] = max((internal_state["api"]["latency"] * curr) / new, 100)
                 internal_state["task_runner"]["replicas"] = new
@@ -128,7 +131,7 @@ class HardFeedbackLoopTask:
                 internal_state["db"]["latency"] = max((internal_state["db"]["latency"] * curr) / new, 100)
 
                 internal_state["api"]["cpu"] = max(
-                    internal_state["api"]["cpu"] - 4 * delta, 20
+                    internal_state["api"]["cpu"] - 8 * delta, 20
                 )
                 
                 internal_state["api"]["latency"] = max((internal_state["api"]["latency"] * curr) / new, 100)
@@ -238,9 +241,6 @@ class HardFeedbackLoopTask:
                 return -1 # no matching components
             reward -= 0.05 * action.value  # smaller penalty (encourage fixing over-provisioning)
 
-        if action.action_type == "restart_service" and action.target == "api":
-            reward += 2.5
-
         if curr_db["cpu"] > prev_db["cpu"]:
             reward -= 0.2
 
@@ -262,7 +262,7 @@ class HardFeedbackLoopTask:
 
         reward -= penalty
 
-        return reward
+        return np.clip(reward, 0.0, 1.0)
     
     def grade(self, final_state, actions):
         api = final_state["services"]["api"]
@@ -274,25 +274,28 @@ class HardFeedbackLoopTask:
             for a in actions
         )
 
-        api_ok = api["latency"] < 200 and api["error"] < 0.15
-        db_ok = db["cpu"] < 70 and db["latency"] < 200
+        api_ok = api["latency"] < 300 and api["error"] < 0.2
+        db_ok = db["cpu"] < 70 and db["latency"] < 300
         task_ok = task["latency"] < 300 and task["cpu"] < 70 and task["free_memory"] > 3
 
         success = api_ok and db_ok and task_ok
+        reason = ""
         score = 0.0
         if task_ok:
             score += 0.3
+            reason += "task runners are now healthy "
         if db_ok:
             score += 0.3
+            reason += "DB now healthy "
         if api_ok:
             score += 0.4
+            reason += "Api servers healthy"
+        
+        if score == 1.0:
+            reason = "System Stabilized " + reason
 
         return {
             "success": success,
-            "score": 1.0 if success else 0.0,
-            "reason": (
-                "Feedback loop resolved correctly"
-                if success else
-                "Incorrect mitigation or root cause not addressed"
-            )
+            "score": score,
+            "reason": reason
         }

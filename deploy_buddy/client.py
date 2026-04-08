@@ -23,10 +23,7 @@ class DeployBuddyEnv(
     """
 
     def _step_payload(self, action: DeployBuddyAction) -> Dict:
-        """
-        Convert DeployBuddyAction to JSON payload for step message.
-        """
-        # FIX: send full action, not "message"
+        # No need to manually inject; model_dump() handles it now
         return action.model_dump()
 
     def _parse_result(self, payload: Dict) -> StepResult[DeployBuddyObservation]:

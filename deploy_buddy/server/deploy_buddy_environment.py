@@ -143,8 +143,12 @@ class DeployBuddyEnvironment(Environment):
     def evaluate(self):
         return self.grade()
 
-    def step(self, action: DeployBuddyAction) -> DeployBuddyObservation:
+    def step(self, action: DeployBuddyAction) -> DeployBuddyObservation: 
         prev_state = deepcopy(self._internal_state)
+        if action.grade == True:
+            # so the step is done now we are only grading
+            gradepoints = self.grade()
+            return DeployBuddyObservation(metadata={"fuck": "meta"})
 
         self._state.step_count += 1
         self._internal_state["time"] += 1
@@ -160,8 +164,6 @@ class DeployBuddyEnvironment(Environment):
         # compute reward
         reward = self._compute_reward(prev_state, self._internal_state, action)
 
-        
-
         obs = self._get_observation()
 
         # check termination
@@ -171,7 +173,6 @@ class DeployBuddyEnvironment(Environment):
 
         if done:
             obs.reward = 1
-
         return obs
     
     def _is_resolved(self, observations):

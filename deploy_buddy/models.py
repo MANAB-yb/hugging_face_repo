@@ -38,7 +38,7 @@ class DeployBuddyAction(Action):
         description="Used for scaling (number of replicas)"
     )
 
-    grade: bool = Field(
+    grade: Optional[bool] = Field(
         default=False,
         description="enable grading/ evaluation"
     )
@@ -69,7 +69,7 @@ class DeployBuddyObservation(Observation):
 
     task_id: int = Field(default=0)
 
-    metadata: Dict[str, Any] = Field(
+    grades_data: Dict[str, Any] = Field(
         default_factory=dict,
         description="Additional data like grading results"
     )

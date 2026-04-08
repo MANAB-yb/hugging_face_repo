@@ -166,7 +166,7 @@ The reward is based on how effectively the agent resolves the underlying issue.
 
 ## Advanced Usage
 
-TODO: Fill out this
+It helps to create a powerfull LLM which will help to find out the root cause in a incident occured in a distributed environment systems and resolve it
 
 ### Using the Context Manager
 
@@ -246,6 +246,64 @@ Run the server locally for development:
 ```bash
 uvicorn server.app:app --reload
 ```
+
+## Tasks
+Deploy Buddy contains *3 incident scenarios*:
+
+### Task 1: Easy — DB Bottleneck
+
+* *Problem*: Database CPU high, connections exhausted
+* *Symptom*: API latency increases
+* *Root Cause*: DB overload
+
+ *Correct Action*: Scale database
+  Wrong: Scaling API, restarting services
+
+ *Learning*:
+*Identify bottleneck and scale the right component*
+
+###  Task 2: Medium — Memory Leak
+
+* *Problem*: Task Runners having very high memory usage, crashing
+* *Clue*: Recent version upgrade in logs
+* *Root Cause*: Bug (memory leak) in the recent upgrades, not resource issue
+
+*Correct Action*: Revert version
+Wrong: Scaling (makes it worse)
+
+ *Learning*:
+*Not all problems are solved by scaling — sometimes it’s code*
+
+---
+
+### Task 3: Hard — Feedback Loop
+
+- Problem: Cascading failures due to retry storm  
+- Root Cause: API ↔ Task Runner feedback loop  
+
+Correct Action:
+1. scale Task Runner
+2. Restart Api Server
+
+ Wrong:
+- Scaling down Task Runner
+- Reverting versions
+
+ Learning:
+*Understand system interactions, find the actual bottleneck component and act on it*
+
+## Key SRE Lessons
+
+* Don’t blindly scale
+* Prioritize both metrics and logs
+* Identify root cause, not symptoms
+* Systems fail in chains, not isolation
+* Right action > more resources
+
+## Goals
+* Incident diagnosis
+* Infrastructure decision-making
+* Real-world system failures
 
 ## Project Structure
 

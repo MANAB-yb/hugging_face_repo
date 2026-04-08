@@ -12,10 +12,10 @@ IMAGE_NAME = os.getenv("IMAGE_NAME")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 
 API_BASE_URL = "https://router.huggingface.co/v1"
-# MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-MODEL_NAME = "Qwen/Qwen2.5-72B-Instruct"
+MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 
 TASKS = ["task1", "task2", "task3"]
+# TASKS = ["task2"]
 
 BENCHMARK = "deploy_buddy"
 
@@ -170,11 +170,9 @@ Remember:
 
 
 # ---------- MODEL ----------
-def get_action(client: OpenAI, obs, history, lessons=None):
+def get_action(client: OpenAI, obs, history):
     try:
         system_prompt = SYSTEM_PROMPT
-        if lessons:
-            system_prompt += f"\n\nLessons from previous tasks:\n{lessons}"
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
@@ -198,10 +196,10 @@ def get_action(client: OpenAI, obs, history, lessons=None):
     except Exception as e:
         print(f"[DEBUG] Model error: {e}", flush=True)
 
-        # Neutral fallback (NOT scaling biased)
+        # If LLM failed to provide response, wait for the next step
         return DeployBuddyAction(
-            action_type="restart_service",
-            target="api",
+            action_type="wait",
+            target=None,
             value=None
         ), "fallback_action"
 
@@ -213,7 +211,7 @@ async def main():
     env = await DeployBuddyEnv.from_docker_image(IMAGE_NAME)
 
     try:
-        global_lessons = None
+        global_lessons = ""
         for task in TASKS:
             rewards: List[float] = []
             history: List[str] = []
@@ -228,7 +226,7 @@ async def main():
                 for step in range(1, MAX_STEPS + 1):
                     obs = result.observation
 
-                    action, action_str = get_action(client, obs, history, global_lessons)
+                    action, action_str = get_action(client, obs, history)
 
                     result = await env.step(action=action)
 
@@ -252,44 +250,44 @@ async def main():
 
             finally:
                 # Finally grade it
-                # dummy_action = DeployBuddyAction(
-                #                 action_type="wait",
-                #                 target=None,
-                #                 value=None,
-                #                 grade=True
-                #             )
-                # grade_data = await env.step(action=dummy_action)
-                # print(f"grade is {grade_data}")
-                # grade = grade_data.metadata
-                # print(f"grade is {grade}")
-                # print(f"type of grade is {type(grade)}")
+                dummy_action = DeployBuddyAction(
+                                action_type="wait",
+                                target=None,
+                                value=None,
+                                grade=True
+                            )
+                grade_data = await env.step(action=dummy_action)
+                grade = grade_data.observation.grades_data
+                print(f"grade is {grade}")
                 
-                # reflection_prompt = f"""
-                #     TASK FINISHED.
-                #     Score: {grade['score']}/1.0
-                #     Reason: {grade['reason']}
+                reflection_prompt = f"""
+                    TASK FINISHED.
+                    Score: {grade['score']}/1.0
+                    Reason: {grade['reason']}
 
-                #     Extract 3 concise operational lessons.
+                    Extract 3 concise operational lessons.
 
-                #     Rules:
-                #     - Each lesson must be specific and actionable
-                #     - No generic advice
-                #     - Focus on root-cause identification and correct actions
-                #     - Keep each lesson under 15 words
+                    Rules:
+                    - Each lesson must be specific and actionable
+                    - No generic advice
+                    - Focus on root-cause identification and correct actions
+                    - Keep each lesson under 15 words
 
-                #     Output as bullet points.
-                #     """
+                    Output as bullet points.
+                    """
                 
-                # # Add the prompt to the existing conversation
-                # messages = [{"role": "user", "content": reflection_prompt}]
-                
-                # reflection_result = client.chat.completions.create(
-                #     model=MODEL_NAME,
-                #     messages=messages
-                # )
-                # global_lessons += reflection_result.choices[0].message.content + "\n"
-
-                # global_lessons = global_lessons[-MAX_LESSONS_CHARS:]
+                # Add the prompt to the existing conversation
+                messages = [{"role": "user", "content": reflection_prompt}]
+                try:
+                    reflection_result = client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=messages
+                    )
+                    global_lessons += reflection_result.choices[0].message.content + "\n"
+                    global_lessons = global_lessons[-MAX_LESSONS_CHARS:]
+                except Exception as ex:
+                    print("failed to extract lessons from prev test due to ")
+                    print(ex)
                 
                 log_end(success=success, steps=steps_taken, rewards=rewards)
 

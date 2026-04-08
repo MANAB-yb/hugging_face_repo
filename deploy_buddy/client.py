@@ -40,12 +40,13 @@ class DeployBuddyEnv(
             done=obs_data.get("done", False),
             reward=obs_data.get("reward", 0.0),
             metadata=obs_data.get("metadata", {}),
+            grades_data=obs_data.get("grades_data", {})
         )
 
         return StepResult(
             observation=observation,
             reward=payload.get("reward", 0.0),
-            done=payload.get("done", False),
+            done=payload.get("done", False)
         )
 
     def _parse_state(self, payload: Dict) -> State:

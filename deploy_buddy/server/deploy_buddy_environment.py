@@ -134,21 +134,18 @@ class DeployBuddyEnvironment(Environment):
     #         return True
     #     return False
     
-    def grade(self):
+    def evaluate(self):
         return self.task.grade(
             self._internal_state,
             self.actions
         )
 
-    def evaluate(self):
-        return self.grade()
-
     def step(self, action: DeployBuddyAction) -> DeployBuddyObservation: 
         prev_state = deepcopy(self._internal_state)
         if action.grade == True:
             # so the step is done now we are only grading
-            gradepoints = self.grade()
-            return DeployBuddyObservation(metadata={"fuck": "meta"})
+            gradepoints = self.evaluate()
+            return DeployBuddyObservation(grades_data=gradepoints)
 
         self._state.step_count += 1
         self._internal_state["time"] += 1
